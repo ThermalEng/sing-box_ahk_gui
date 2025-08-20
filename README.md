@@ -4,4 +4,7 @@
 ## 退出是用标准的ctrl+c退出，没有暴力kill，防止路由表残留。
 ## 不能手动切换，只能退出重进，因为在win下ctrl+c无法只退出代理不退出界面。
 ## 注意要兼容性选项选择管理员模式。
-<img width="749" height="441" alt="PixPin_2025-08-19_17-44-57" src="https://github.com/user-attachments/assets/6857ce36-3728-47c7-b827-f05d9aaae7e5" />
+<img width="749" height="441" alt="PixPin_2025-08-20_15-11-02" src="https://github.com/user-attachments/assets/fe79c2e3-5b77-4236-bcf0-e691f3a6abea" />
+<img width="1054" height="347" alt="PixPin_2025-08-20_15-11-28" src="https://github.com/user-attachments/assets/4d800adc-00ce-4151-9577-e287ade7f485" />
+<img width="307" height="117" alt="PixPin_2025-08-20_15-12-08" src="https://github.com/user-attachments/assets/6dd92d17-af41-4a67-a28a-6581bfa56769" />
+
