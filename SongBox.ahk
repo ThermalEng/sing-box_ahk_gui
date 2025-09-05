@@ -24,30 +24,40 @@ B64ToFile(b64) {
 
 ; 从 ini 文件读取配置（如果不存在则写入默认值）
 LoadConfig() {
-    global proxyCmd, proxyName, baseDir, iniFile
+    global proxyCmd, proxyName, baseDir, iniFile, proxyMode
     proxyCmd := Map()
     proxyName := Map()
+    proxyMode := Map()
     Loop 3 {
         name := IniRead(iniFile, "Proxy" A_Index, "Name", ["回家模式","世界模式","工作模式"][A_Index])
         addr := IniRead(iniFile, "Proxy" A_Index, "Address"
             , [baseDir "\sing-box\Win_GoHome.json"
               ,baseDir "\sing-box\Win_Global.json"
               ,baseDir "\sing-box\Win_EasyConnect.json"][A_Index])
+        mode := IniRead(iniFile, "Proxy" A_Index, "Mode", "file") ; 默认 file
+
         proxyName[A_Index] := name
+        proxyMode[A_Index] := mode
+
         ; 允许相对路径
-        if !InStr(addr, ":")  ; 没有盘符则视为相对路径
+        if !InStr(addr, ":")
             addr := baseDir "\" addr
-        proxyCmd[A_Index] := baseDir "\sing-box.exe run -c " addr
+
+        proxyCmd[A_Index] := baseDir "\sing-box.exe run " (mode="folder" ? "-C " : "-c ") addr
     }
 }
 
-SaveConfig(names, addrs) {
+
+
+SaveConfig(namesArr, addrsArr, modes) {
     global iniFile
     Loop 3 {
-        IniWrite(names[A_Index], iniFile, "Proxy" A_Index, "Name")
-        IniWrite(addrs[A_Index], iniFile, "Proxy" A_Index, "Address")
+        IniWrite(namesArr[A_Index], iniFile, "Proxy" A_Index, "Name")
+        IniWrite(addrsArr[A_Index], iniFile, "Proxy" A_Index, "Address")
+        IniWrite(modes[A_Index], iniFile, "Proxy" A_Index, "Mode")
     }
 }
+
 
 LoadConfig()
 
@@ -142,32 +152,43 @@ UpdateTimer() {
 
 ; === 设置页面 ===
 ShowSettings() {
-    global proxyName, proxyCmd, baseDir, iniFile, mainGui, btn1, btn2, btn3
+    global proxyName, proxyCmd, proxyMode, baseDir, iniFile, mainGui, btn1, btn2, btn3
 
-    mainGui.Hide()  ; 打开设置前先隐藏主界面
+    mainGui.Hide()
 
     setGui := Gui("", "代理设置")
     setGui.SetFont("s10")
     names := ["","",""]
     addrs := ["","",""]
+    modes := ["","",""]
 
     Loop 3 {
         setGui.AddText("xm y+10 w60 h23 +0x202", A_Index ". 名称")
         names[A_Index] := setGui.AddEdit("x+5 w100 +0x200", proxyName[A_Index])
 
         setGui.AddText("x+10 w70 h23 +0x202", "脚本地址")
-        addr := RegExReplace(proxyCmd[A_Index], ".* -c\s+")
+
+        ; 从 proxyMode 恢复模式
+        modes[A_Index] := proxyMode[A_Index]
+
+        addr := RegExReplace(proxyCmd[A_Index], ".* -[cC]\s+")
         if InStr(addr, baseDir)
-            addr := SubStr(addr, StrLen(baseDir)+2) ; 转为相对路径
+            addr := SubStr(addr, StrLen(baseDir)+2)
         addrs[A_Index] := setGui.AddEdit("x+5 w250 +0x200", addr)
+
+        btnToggle := setGui.AddButton("x+5 w60", modes[A_Index]="file" ? "文件" : "文件夹")
+        btnToggle.OnEvent("Click", ToggleMode.Bind(A_Index, btnToggle, modes))
     }
 
     btnSave := setGui.AddButton("x150 y+15 w100", "保存")
     btnCancel := setGui.AddButton("x+10 w100", "取消")
 
     btnSave.OnEvent("Click", (*) => (
-        SaveConfig([names[1].Value, names[2].Value, names[3].Value],
-                   [addrs[1].Value, addrs[2].Value, addrs[3].Value]),
+        SaveConfig(
+            [names[1].Value, names[2].Value, names[3].Value],
+            [addrs[1].Value, addrs[2].Value, addrs[3].Value],
+            modes
+        ),
         LoadConfig(),
         btn1.Text := "启动" proxyName[1],
         btn2.Text := "启动" proxyName[2],
@@ -177,15 +198,18 @@ ShowSettings() {
 
     btnCancel.OnEvent("Click", (*) => setGui.Destroy())
 
-    ; 关闭设置窗口时恢复主界面
     setGui.OnEvent("Close", (*) => mainGui.Show())
-
-    ; 居中显示
     setGui.Show("AutoSize Center")
-
-    ; 阻塞，直到设置窗口关闭
     WinWaitClose(setGui.Hwnd)
-
-    ; 窗口关闭后恢复主界面
     mainGui.Show()
+}
+
+ToggleMode(idx, btnCtrl, modes, *) {
+    if (modes[idx] = "file") {
+        modes[idx] := "folder"
+        btnCtrl.Text := "文件夹"
+    } else {
+        modes[idx] := "file"
+        btnCtrl.Text := "文件"
+    }
 }
