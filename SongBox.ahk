@@ -2,6 +2,13 @@
 #SingleInstance Force
 #Warn
 
+; 必需管理员权限：若未以管理员运行，尝试以管理员身份重启自身并退出当前实例
+if !A_IsAdmin {
+    ; 以 UAC 提权重启脚本（保留完整脚本路径）
+    Run('*RunAs "' A_ScriptFullPath '"')
+    ExitApp()
+}
+
 ; === 配置区 ===
 baseDir := A_ScriptDir
 iniFile := baseDir "\songbox.ini"
@@ -63,7 +70,6 @@ LoadConfig()
 
 global startTime := 0
 global ProxyIndex := 0
-global SbPid := 0
 
 ; === GUI 界面 ===
 mainGui := Gui("AlwaysOnTop", "代理启动器")
@@ -74,16 +80,16 @@ mainGui.AddText("xm w220 vTimerText +Center", "运行时间：00:00:00")
 btn1 := mainGui.AddButton("x240 y20 w120 h32", "启动" proxyName[1])
 btn2 := mainGui.AddButton("x240 y+10 w120 h32", "启动" proxyName[2])
 btn3 := mainGui.AddButton("x240 y+10 w120 h32", "启动" proxyName[3])
-btnStop := mainGui.AddButton("x60 y+15 w260 h32", "安全退出")
+btnStop := mainGui.AddButton("x60 y+15 w260 h32", "停止代理")
 btnSet := mainGui.AddButton("xm yp w32 h32", "⚙")
 btnSet.SetFont("s14", "Segoe UI Symbol") ; 或 Segoe MDL2 Assets
 
 
 
-btn1.OnEvent("Click", (*) => StartProxy(1))
-btn2.OnEvent("Click", (*) => StartProxy(2))
-btn3.OnEvent("Click", (*) => StartProxy(3))
-btnStop.OnEvent("Click", (*) => SendCtrlBreak(SbPid))
+btn1.OnEvent("Click", (*) => StartOrStopProxy(1))
+btn2.OnEvent("Click", (*) => StartOrStopProxy(2))
+btn3.OnEvent("Click", (*) => StartOrStopProxy(3))
+btnStop.OnEvent("Click", (*) => StopProxy())
 btnSet.OnEvent("Click", (*) => ShowSettings())
 
 mainGui.OnEvent("Close", (*) => mainGui.Hide())
@@ -93,49 +99,112 @@ TraySetIcon(GreyIco,,"未运行")
 TrayMenu := A_TrayMenu
 TrayMenu.Delete()
 TrayMenu.Add("显示窗口", (*) => mainGui.Show())
-TrayMenu.Add("安全退出", (*) => SendCtrlBreak(SbPid))
+TrayMenu.Add("安全退出", (*) => SafeExit())
 TrayMenu.Default := "显示窗口"
 
 SetTimer(UpdateTimer, 1000)
 
-StartProxy(idx) {
-    global startTime, ProxyIndex, SbPid, proxyName, proxyCmd
-    if startTime != 0
-        return
-    Run("*RunAs " proxyCmd[idx], , "Hide", &pid)
+; 启动或停止代理的智能按钮
+StartOrStopProxy(idx) {
+    global startTime, ProxyIndex, proxyName, proxyCmd
+    
+    local pid := ProcessExist("sing-box.exe")  ; 添加 local
+    
+    ; 如果有进程在运行，先停止它
+    if (pid != 0) {
+        StopProxy()
+        Sleep(100)  ; 等待进程完全停止
+    }
+    
+    ; 启动新的代理
+    Run("*RunAs " proxyCmd[idx], , "Hide", &newPid)
     ProxyIndex := idx
-    SbPid := pid
     startTime := A_TickCount
     UpdateStatusBox()
-    if (pid == 0) 
-        TrayTip("Sing-Box","启动失败，请检查配置路径", 1)
+    
+    if (newPid == 0) 
+        TrayTip("Sing-Box", "启动失败，请检查配置路径", 1)
     else
-        TrayTip("Sing-Box","已启动：" proxyName[idx], 1)
+        TrayTip("Sing-Box", "已启动：" proxyName[idx], 1)
 }
 
-SendCtrlBreak(pid) {
-    pid := ProcessExist("sing-box.exe")
-    if (pid == 0) 
-        ExitApp()
-    TrayTip("Sing-Box","安全退出：" proxyName[ProxyIndex], 1)
+; 停止代理
+StopProxy() {
+    global startTime, ProxyIndex, mainGui
+    
+    local pid := ProcessExist("sing-box.exe")  ; 添加 local
+    if (pid == 0) {
+        TrayTip("Sing-Box", "sing-box 未运行", 1)
+        return
+    }
+    
+    ;TrayTip("Sing-Box", "正在停止代理...", 1)
+    
+    ; 释放当前控制台
     DllCall("FreeConsole")
-    DllCall("AttachConsole", "UInt", pid)
-    DllCall("GenerateConsoleCtrlEvent", "UInt", 0, "UInt", 0)
+    
+    ; 附加到目标进程的控制台
+    if !DllCall("AttachConsole", "UInt", pid) {
+        MsgBox("无法连接到 sing-box 进程")
+        return
+    }
+    
+    ; 屏蔽当前进程对 Ctrl+C 的处理
+    DllCall("SetConsoleCtrlHandler", "Ptr", 0, "Int", true)
+    
+    ; 发送 Ctrl+C 信号
+    DllCall("GenerateConsoleCtrlEvent", "UInt", 0, "UInt", pid)
+    
+    Sleep(100)
+    
+    ; 恢复状态
+    DllCall("SetConsoleCtrlHandler", "Ptr", 0, "Int", false)
+    DllCall("FreeConsole")
+    
+    ; 重置全局变量
+    startTime := 0
+    ProxyIndex := 0
+    
+    ; 更新面板显示
+    UpdateStatusBox()
+    mainGui["TimerText"].Value := "运行时间：00:00:00"
+    
+    ;TrayTip("Sing-Box", "代理已停止", 1)
 }
 
+; 安全退出：停止 sing-box 并退出程序
+SafeExit() {
+    global startTime, ProxyIndex
+    
+    local pid := ProcessExist("sing-box.exe")  ; 添加 local
+    if (pid != 0) {
+        TrayTip("Sing-Box", "正在停止代理并退出...", 1)
+        StopProxy()
+        Sleep(100)
+    }
+    
+    TrayTip("Sing-Box", "SongBox 已退出", 1)
+    Sleep(100)
+    ExitApp()
+}
+
+; 修改 UpdateStatusBox 函数确保 mainGui 对象正确
 UpdateStatusBox() {
     global mainGui, proxyName, ProxyIndex, startTime, baseDir, GreenIco, GreyIco, YellowIco, RedIco
-    status := (startTime>0 && ProxyIndex>0) ? "当前代理：" proxyName[ProxyIndex] : "未运行"
+    
+    local status := (startTime > 0 && ProxyIndex > 0) 
+        ? "当前代理：" proxyName[ProxyIndex] 
+        : "未运行"
 
     switch ProxyIndex {
         case 0:
-            TraySetIcon(GreyIco,, "未运行")
+            TraySetIcon(GreyIco, , "未运行")
         case 1:
-            TraySetIcon(GreenIco,, "当前模式：" proxyName[ProxyIndex])
+            TraySetIcon(GreenIco, , "当前模式：" proxyName[ProxyIndex])
         case 2:
-            TraySetIcon(YellowIco,, "当前模式：" proxyName[ProxyIndex])
+            TraySetIcon(YellowIco, , "当前模式：" proxyName[ProxyIndex])
         case 3:
-            TraySetIcon(RedIco,, "当前模式：" proxyName[ProxyIndex])                    
+            TraySetIcon(RedIco, , "当前模式：" proxyName[ProxyIndex])                    
     }
     mainGui["StatusBox"].Value := status
 }
