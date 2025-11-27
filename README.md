@@ -6,7 +6,7 @@
 ## 3.右键-属性，兼容性选项卡，以管理员模式运行，应用，确定。
 ## 4.Enjoy！
 ## 退出是用标准的ctrl+c退出，没有暴力kill，防止路由表残留。
-## 不能手动切换，只能退出重进，因为在win下ctrl+c无法只退出代理不退出界面。
+## 感谢BrontoDIY/SingboxGUI，退出部分参考了他的代码思路
 
 <img width="749" height="441" alt="PixPin_2025-08-20_15-11-02" src="https://github.com/user-attachments/assets/fe79c2e3-5b77-4236-bcf0-e691f3a6abea" />
 <img width="1054" height="347" alt="PixPin_2025-08-20_15-11-28" src="https://github.com/user-attachments/assets/4d800adc-00ce-4151-9577-e287ade7f485" />
